@@ -1,11 +1,11 @@
-module Swagger2 exposing (BodyParameters, Endpoint, Endpoints, Location(..), Name, Operation, Parameter(..), Path, PathItem, Paths, Response, Responses, Spec, Verb(..), constant, decoder, locationString, maybeOptional, operationDecoder, parameterDecoder, pathItemDecoder, pathItemDecoder_, pathsDecoder, responseDecoder)
+module Swagger2.Model exposing (BodyParameters, Endpoint, Endpoints, Location(..), Name, Operation, Parameter(..), Path, PathItem, Paths, Response, Responses, Spec, Verb(..), constant, decoder, locationString, maybeOptional, operationDecoder, parameterDecoder, pathItemDecoder, pathItemDecoder_, pathsDecoder, responseDecoder)
 
 --import Decode exposing (Schema, constant)
 
 import Dict
-import Json.Decode exposing (Decoder, andThen, bool, dict, fail, field, float, int, keyValuePairs, list, nullable, oneOf, string, succeed)
-import Json.Decode.Pipeline exposing (decode, optional, required)
-import JsonSchema exposing (Definitions, PreSchema(..), decoder, definitionsDecoder)
+import Json.Decode exposing (Decoder, andThen, bool, fail, field, keyValuePairs, list, nullable, oneOf, string, succeed)
+import Json.Decode.Pipeline exposing (optional, required)
+import JsonSchema exposing (Definitions, PreSchema(..), decoder)
 
 
 type alias Spec =
@@ -146,7 +146,7 @@ pathItemDecoder_ =
 
 pathItemDecoder : Decoder PathItem
 pathItemDecoder =
-    decode PathItem
+    succeed PathItem
         |> maybeOptional "get" operationDecoder
         |> maybeOptional "put" operationDecoder
         |> maybeOptional "post" operationDecoder
@@ -159,14 +159,14 @@ pathItemDecoder =
 
 operationDecoder : Decoder Operation
 operationDecoder =
-    decode Operation
+    succeed Operation
         |> required "parameters" (list parameterDecoder)
         |> required "responses" (keyValuePairs responseDecoder)
 
 
 responseDecoder : Decoder Response
 responseDecoder =
-    decode Response
+    succeed Response
         |> required "description" string
         |> maybeOptional "schema" JsonSchema.preSchemaDecoder
 
@@ -175,19 +175,19 @@ parameterDecoder : Decoder Parameter
 parameterDecoder =
     let
         withIn : String -> Decoder a -> Decoder a
-        withIn typeString decoder =
+        withIn typeString decoder_ =
             field "in" (constant typeString string)
-                |> andThen (always decoder)
+                |> andThen (always decoder_)
 
         withType : String -> Decoder a -> Decoder a
-        withType typeString decoder =
+        withType typeString decoder_ =
             field "type" (constant typeString string)
-                |> andThen (always decoder)
+                |> andThen (always decoder_)
     in
     Json.Decode.lazy
         (\_ ->
             Json.Decode.oneOf
-                [ decode BodyParameters
+                [ succeed BodyParameters
                     |> required "name" string
                     |> maybeOptional "description" string
                     |> maybeOptional "required" bool
@@ -211,20 +211,20 @@ parameterDecoder =
 
 
 maybeOptional : String -> Decoder a -> Decoder (Maybe a -> b) -> Decoder b
-maybeOptional key decoder =
-    optional key (nullable decoder) Nothing
+maybeOptional key decoder_ =
+    optional key (nullable decoder_) Nothing
 
 
 constant : a -> Decoder a -> Decoder a
-constant expectedValue decoder =
-    decoder
+constant expectedValue decoder_ =
+    decoder_
         |> andThen
             (\actualValue ->
                 if actualValue == expectedValue then
                     succeed actualValue
 
                 else
-                    fail <| "Expected value: " ++ toString expectedValue ++ " but got value: " ++ toString actualValue
+                    fail <| "Expected value: " ++ Debug.toString expectedValue ++ " but got value: " ++ Debug.toString actualValue
             )
 
 

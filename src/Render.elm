@@ -1,13 +1,18 @@
-module Render exposing (Coordinates, Dimensions, Icon(..), Name, color, computeHorizontalText, computeTextHeight, computeTextWidth, computeVerticalText, darkClr, iconGeneric, iconGraph, iconRect, lightClr, pillHeight, roundRect, separatorGraph, toSvgCoordsTuple, viewAnonymousSchema, viewBodyParams, viewBool, viewElms, viewElms_, viewFile, viewFloat, viewInteger, viewMaybeTitle, viewMulti, viewNameGraph, viewPath, viewPathItems, viewPathParams, viewProperties, viewProperty, viewRequest, viewRequestResponse, viewResponse, viewResponses, viewSchema, viewString, ySpace)
+module Render exposing (Coordinates, Dimensions, Icon(..), Name, color, computeHorizontalText, computeTextHeight, computeTextWidth, computeVerticalText, darkClr, iconGeneric, iconGraph, iconRect, lightClr, pillHeight, roundRect, separatorGraph, toSvgCoordsTuple, viewAnonymousSchema, viewBodyParams, viewBool, viewElms, viewElms_, viewFile, viewFloat, viewInteger, viewMaybeTitle, viewMulti, viewNameGraph, viewPathParams, viewProperty, viewResponse, viewResponses, viewSchema, viewString, ySpace)
 
 import Color exposing (gray)
 import Color.Convert
 import Dict
 import Html exposing (text)
+import Json.Schema as Schema
 import JsonSchema
+import List.Extra
 import Svg exposing (Svg)
 import Svg.Attributes as SvgA exposing (refY)
-import Swagger2 as Swagger exposing (Location(..), Parameter(..), Verb(..), decoder)
+
+
+
+-- import Swagger2 as Swagger exposing (Location(..), Parameter(..), Verb(..), decoder)
 
 
 type alias Coordinates =
@@ -26,85 +31,9 @@ pillHeight =
     28
 
 
-viewPath : JsonSchema.Definitions -> ( Swagger.Path, Swagger.PathItem ) -> Svg msg
-viewPath defs ( path, pathItem ) =
-    let
-        ( pathGraph, ( width, height ) ) =
-            roundRect path ( 10, 10 )
-
-        ( pathItemGraph, ( width2, height2 ) ) =
-            viewPathItems defs ( width + 10, 10 ) pathItem
-
-        w =
-            Basics.max width width2
-                |> (+) 10
-                |> Basics.toString
-
-        h =
-            (height2 + 10)
-                |> Basics.toString
-
-        box =
-            "0 0 " ++ w ++ " " ++ h
-
-        graph =
-            Svg.g [] [ pathGraph, pathItemGraph ]
-    in
-    Svg.svg
-        [ SvgA.width w, SvgA.height h, SvgA.viewBox box ]
-        [ graph ]
-
-
-viewPathItems : JsonSchema.Definitions -> Coordinates -> Swagger.PathItem -> ( Svg msg, Dimensions )
-viewPathItems defs coords { get, put, post, delete, patch, options } =
-    let
-        f ( a, mB ) =
-            case mB of
-                Just b ->
-                    Just ( a, b )
-
-                Nothing ->
-                    Nothing
-
-        ops =
-            List.filterMap f [ ( "get", get ), ( "put", put ), ( "post", post ), ( "delete", delete ), ( "patch", patch ), ( "options", options ) ]
-
-        ( graphs, ( w, h ) ) =
-            viewElms viewRequestResponse defs coords ops
-
-        graph =
-            Svg.g [] graphs
-    in
-    ( graph, ( w, h ) )
-
-
-viewRequestResponse : JsonSchema.Definitions -> Coordinates -> ( String, Swagger.Operation ) -> ( Svg msg, Dimensions )
-viewRequestResponse defs ( x, y ) ( path, { parameters, responses } ) =
-    let
-        ( pathGraph, ( w1, h1 ) ) =
-            roundRect path ( x, y )
-
-        ( paramsGraph, ( widthP, heightP ) ) =
-            viewElms viewRequest defs ( w1 + 10, y ) parameters
-
-        responseY =
-            Basics.max (heightP + ySpace) (h1 + ySpace + pillHeight)
-
-        ( responseGraph, ( widthR, heightR ) ) =
-            viewElms viewResponse defs ( w1 + 10, responseY ) responses
-
-        width =
-            Basics.max widthP widthR
-
-        height =
-            heightR
-    in
-    ( Svg.g [] (pathGraph :: (paramsGraph ++ responseGraph)), ( width, heightR ) )
-
-
 viewElms :
-    (JsonSchema.Definitions -> Coordinates -> a -> ( Svg msg, Dimensions ))
-    -> JsonSchema.Definitions
+    (Schema.Definitions -> Coordinates -> a -> ( Svg msg, Dimensions ))
+    -> Schema.Definitions
     -> Coordinates
     -> List a
     -> ( List (Svg msg), Coordinates )
@@ -117,8 +46,8 @@ viewElms fn defs coords elms =
 
 
 viewElms_ :
-    (JsonSchema.Definitions -> Coordinates -> a -> ( Svg msg, Dimensions ))
-    -> JsonSchema.Definitions
+    (Schema.Definitions -> Coordinates -> a -> ( Svg msg, Dimensions ))
+    -> Schema.Definitions
     -> Coordinates
     -> List a
     -> ( List (Svg msg), Coordinates, Float )
@@ -141,20 +70,6 @@ viewElms_ fn defs (( x, y ) as coords) elms =
             ( g :: gs, ( x, h2 ), maxW )
 
 
-viewRequest : JsonSchema.Definitions -> Coordinates -> Swagger.Parameter -> ( Svg msg, Dimensions )
-viewRequest defs coords parameter =
-    case parameter of
-        InBody prms ->
-            viewBodyParams defs coords prms
-
-        InOther location prms name ->
-            let
-                loc =
-                    Swagger.locationString location
-            in
-            viewPathParams defs coords loc prms name
-
-
 toSvgCoordsTuple ( a, b ) =
     ( Svg.g [] a, b )
 
@@ -163,15 +78,15 @@ type alias Name =
     String
 
 
-viewAnonymousSchema : JsonSchema.Definitions -> Coordinates -> JsonSchema.PreSchema -> ( Svg msg, Dimensions )
+viewAnonymousSchema : Schema.Definitions -> Coordinates -> Schema.Schema -> ( Svg msg, Dimensions )
 viewAnonymousSchema defs coords schema =
     viewSchema defs coords Nothing schema
 
 
-viewSchema : JsonSchema.Definitions -> Coordinates -> Maybe Name -> JsonSchema.PreSchema -> ( Svg msg, Dimensions )
+viewSchema : Schema.Definitions -> Coordinates -> Maybe Name -> Schema.Schema -> ( Svg msg, Dimensions )
 viewSchema defs (( x, y ) as coords) name schema =
     case schema of
-        JsonSchema.Object { title, properties } ->
+        Schema.Object { title, properties } ->
             let
                 t =
                     Maybe.map (\a -> a ++ " | {..}") name
@@ -181,8 +96,7 @@ viewSchema defs (( x, y ) as coords) name schema =
                     iconRect IObject name coords
 
                 ( propertiesGraphs, newCoords ) =
-                    Dict.toList properties
-                        |> viewElms viewProperty defs ( w + 10, y )
+                    viewElms viewProperty defs ( w + 10, y ) properties
 
                 graphs =
                     objectGraph :: propertiesGraphs
@@ -190,7 +104,7 @@ viewSchema defs (( x, y ) as coords) name schema =
             ( graphs, newCoords )
                 |> toSvgCoordsTuple
 
-        JsonSchema.Array { title, items } ->
+        Schema.Array { title, items } ->
             let
                 t =
                     Maybe.map (\a -> a ++ " | [..]") name
@@ -199,32 +113,40 @@ viewSchema defs (( x, y ) as coords) name schema =
                 ( arrayGraph, ( w, h ) ) =
                     iconRect IList name coords
 
-                viewMaybeSchema =
-                    Maybe.map (viewSchema defs ( w + 10, y ) Nothing) items
+                ( itemsGraphs, newCoords ) =
+                    viewElms viewArrayItem defs ( w + 10, y ) items
+
+                graphs =
+                    arrayGraph :: itemsGraphs
+
+                -- viewMaybeSchema =
+                --     -- List.map (viewSchema defs ( w + 10, y ) Nothing) items
+                --     List.Extra.scanl (\g ( _, y_ ) -> viewSchema defs ( w_, y_ + 10 ) Nothing) items
             in
-            case viewMaybeSchema of
-                Nothing ->
-                    ( arrayGraph, ( w, h ) )
+            ( graphs, newCoords )
+                |> toSvgCoordsTuple
 
-                Just ( g, c ) ->
-                    ( Svg.g [] [ arrayGraph, g ], c )
-
-        JsonSchema.String { title } ->
+        -- case viewMaybeSchema of
+        --     Nothing ->
+        --         ( arrayGraph, ( w, h ) )
+        --     Just ( g, c ) ->
+        --         ( Svg.g [] [ arrayGraph, g ], c )
+        Schema.String { title } ->
             viewString coords name
 
-        JsonSchema.Integer { title } ->
+        Schema.Integer { title } ->
             viewInteger coords name
 
-        JsonSchema.Number { title } ->
+        Schema.Number { title } ->
             viewFloat coords name
 
-        JsonSchema.Boolean { title } ->
+        Schema.Boolean { title } ->
             viewBool coords name
 
-        JsonSchema.Null { title } ->
+        Schema.Null { title } ->
             viewMaybeTitle coords "Null" name
 
-        JsonSchema.Ref { title, ref } ->
+        Schema.Ref { title, ref } ->
             let
                 refName =
                     String.dropLeft 14 ref
@@ -236,7 +158,7 @@ viewSchema defs (( x, y ) as coords) name schema =
                     Maybe.map (\a -> a ++ " | < " ++ refName ++ " >") name
                         |> Maybe.withDefault rname
 
-                ( iconGraph, ( w, h ) ) =
+                ( iconGraph_, ( w, h ) ) =
                     iconRect (IRef refName) name ( x, y )
 
                 refGraph =
@@ -245,21 +167,21 @@ viewSchema defs (( x, y ) as coords) name schema =
             in
             case refGraph of
                 Nothing ->
-                    ( iconGraph, ( w, h ) )
+                    ( iconGraph_, ( w, h ) )
 
                 Just ( g, c ) ->
-                    ( Svg.g [] [ iconGraph, g ], c )
+                    ( Svg.g [] [ iconGraph_, g ], c )
 
-        JsonSchema.OneOf { title, subSchemas } ->
+        Schema.OneOf { title, subSchemas } ->
             viewMulti defs ( x, y ) "|1|" name subSchemas
 
-        JsonSchema.AnyOf { title, subSchemas } ->
+        Schema.AnyOf { title, subSchemas } ->
             viewMulti defs ( x, y ) "|o|" name subSchemas
 
-        JsonSchema.AllOf { title, subSchemas } ->
+        Schema.AllOf { title, subSchemas } ->
             viewMulti defs ( x, y ) "(&)" name subSchemas
 
-        JsonSchema.Fallback _ ->
+        Schema.Fallback _ ->
             ( Svg.g [] [], coords )
 
 
@@ -354,15 +276,26 @@ viewResponse defs ( x, y ) ( code, { description, schema } ) =
             ( graph, newCoords )
 
 
-viewProperties defs coords d =
-    Dict.toList d
-        |> viewElms viewProperty defs coords
+viewProperty defs coords objectProperty =
+    let
+        ( name, property ) =
+            case objectProperty of
+                Schema.Required name_ property_ ->
+                    ( name_, property_ )
+
+                Schema.Optional name_ property_ ->
+                    ( name_, property_ )
+
+        ( schemaGraph, newCoords ) =
+            viewSchema defs coords (Just name) property
+    in
+    ( Svg.g [] [ schemaGraph ], newCoords )
 
 
-viewProperty defs ( x, y ) ( name, schema ) =
+viewArrayItem defs coords schema =
     let
         ( schemaGraph, newCoords ) =
-            viewSchema defs ( x, y ) (Just name) schema
+            viewSchema defs coords Nothing schema
     in
     ( Svg.g [] [ schemaGraph ], newCoords )
 
@@ -382,20 +315,20 @@ roundRect txt ( x, y ) =
 
         mt =
             computeHorizontalText x txt
-                |> Basics.toString
+                |> String.fromFloat
 
         rectWidth =
             textWidth + 30
 
         wRect =
-            Basics.toString rectWidth
+            String.fromFloat rectWidth
 
         wText =
-            Basics.toString textWidth
+            String.fromFloat textWidth
 
         tt =
             computeVerticalText y
-                |> Basics.toString
+                |> String.fromFloat
 
         bg =
             darkClr
@@ -427,8 +360,8 @@ roundRect txt ( x, y ) =
 
         rct =
             Svg.rect
-                [ SvgA.x (Basics.toString x)
-                , SvgA.y (Basics.toString y)
+                [ SvgA.x (String.fromFloat x)
+                , SvgA.y (String.fromFloat y)
                 , SvgA.width wRect
                 , SvgA.height "28"
                 , bg
@@ -482,7 +415,7 @@ iconRect icon txt ( x, y ) =
                     ( [ iconG, separatorG, nameG ], nameW - x + space )
 
         wRect =
-            Basics.toString rectWidth
+            String.fromFloat rectWidth
 
         bg =
             darkClr
@@ -494,8 +427,8 @@ iconRect icon txt ( x, y ) =
 
         rct =
             Svg.rect
-                [ SvgA.x (Basics.toString x)
-                , SvgA.y (Basics.toString y)
+                [ SvgA.x (String.fromFloat x)
+                , SvgA.y (String.fromFloat y)
                 , SvgA.width wRect
                 , SvgA.height "28"
                 , bg
@@ -532,8 +465,8 @@ viewNameGraph ( x, y ) name =
         caption c =
             let
                 attrs =
-                    [ SvgA.x (Basics.toString mt)
-                    , SvgA.y (Basics.toString tt)
+                    [ SvgA.x (String.fromFloat mt)
+                    , SvgA.y (String.fromFloat tt)
                     , fg
                     , SvgA.fontFamily "Monospace"
                     , SvgA.fontSize "12"
@@ -559,18 +492,18 @@ separatorGraph : Coordinates -> ( Svg msg, Dimensions )
 separatorGraph ( x, y ) =
     let
         x1 =
-            Basics.toString x
+            String.fromFloat x
 
         x2 =
             x1
 
         y1 =
             (y + 5)
-                |> Basics.toString
+                |> String.fromFloat
 
         y2 =
             (y + 28 - 5)
-                |> Basics.toString
+                |> String.fromFloat
 
         strokeColor =
             lightClr
@@ -580,7 +513,7 @@ separatorGraph ( x, y ) =
             1.2
 
         attrs =
-            [ SvgA.strokeWidth (Basics.toString strokeWidth)
+            [ SvgA.strokeWidth (String.fromFloat strokeWidth)
             , strokeColor
             , SvgA.strokeLinecap "Round"
             , SvgA.x1 x1
@@ -649,8 +582,8 @@ iconGeneric ( x, y ) iconStr =
                 |> SvgA.fill
 
         attrs =
-            [ SvgA.x (Basics.toString mt)
-            , SvgA.y (Basics.toString tt)
+            [ SvgA.x (String.fromFloat mt)
+            , SvgA.y (String.fromFloat tt)
             , fg
             , SvgA.fontFamily "Monospace"
             , SvgA.fontSize "12"

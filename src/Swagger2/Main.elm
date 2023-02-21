@@ -1,13 +1,11 @@
-module Main exposing (Model, Msg(..), main, swagger, update, view, viewDefinitions, viewSchema, viewSpec)
+module Swagger2.Main exposing (Model, Msg(..), main, swagger, update, view, viewDefinitions, viewPath, viewPaths, viewSpec)
 
 --import JsonSchema.Model exposing (Schema(..))
 
-import Browser
 import Dict
 import Html exposing (Html, div, text)
 import Html.Attributes exposing (style)
 import Json.Decode exposing (decodeString)
-import Json.Schema exposing (Definitions, Schema)
 import JsonSchema exposing (decoder)
 import Render
 
@@ -41,33 +39,48 @@ view model =
             viewSpec spec
 
 
-viewSpec : Json.Schema.Model -> Html Msg
-viewSpec { schema, definitions } =
+viewSpec : Swagger.Spec -> Html Msg
+viewSpec { paths, definitions } =
     Html.div []
-        [ viewSchema definitions schema
-        , viewDefinitions definitions
+        [ viewPaths definitions paths
+        , viewDefinitions (Ok definitions)
         ]
 
 
-viewDefinitions : Definitions -> Html Msg
-viewDefinitions d =
-    let
-        items =
-            Dict.keys d
+viewDefinitions : Result String JsonSchema.Definitions -> Html Msg
+viewDefinitions r =
+    case r of
+        Ok d ->
+            let
+                items =
+                    Dict.keys d
 
-        viewKey k =
-            Html.li [] [ Html.text k ]
-    in
+                viewKey k =
+                    Html.li [] [ Html.text k ]
+            in
+            Html.div []
+                [ Html.h1 [] [ Html.text "Definitions Ok!" ]
+                , Html.ul [] (List.map viewKey items)
+                ]
+
+        Err s ->
+            Html.div []
+                [ Html.p [] [ Html.text s ]
+                ]
+
+
+viewPaths : JsonSchema.Definitions -> Swagger.Paths -> Html Msg
+viewPaths defs paths =
     Html.div []
-        [ Html.h1 [] [ Html.text "Definitions Ok!" ]
-        , Html.ul [] (List.map viewKey items)
+        (List.map (viewPath defs) paths)
+
+
+viewPath : JsonSchema.Definitions -> ( Swagger.Path, Swagger.PathItem ) -> Html Msg
+viewPath defs ( path, pathItem ) =
+    Html.div []
+        [ Html.h1 [ style "font-family" "Monospace" ] [ Html.text path ]
+        , Render.viewPath defs ( path, pathItem )
         ]
-
-
-viewSchema : Definitions -> Schema -> Html Msg
-viewSchema defs schema =
-    Html.div []
-        [ Render.viewSchema defs schema ]
 
 
 
@@ -75,7 +88,7 @@ viewSchema defs schema =
 
 
 main =
-    Browser.sandbox { model = decodeString decoder swagger, view = view, update = update }
+    Html.beginnerProgram { model = decodeString decoder swagger, view = view, update = update }
 
 
 swagger : String
